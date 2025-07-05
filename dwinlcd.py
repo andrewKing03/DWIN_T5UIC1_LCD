@@ -1541,7 +1541,6 @@ class DWIN_LCD:
         if (encoder_diffState == self.ENCODER_DIFF_ENTER):
             self.EncoderRateLimit = True
            
-
            
 
             if (self.pd.HMI_ValueStruct.show_mode == -1):  # temperature
@@ -2127,9 +2126,6 @@ class DWIN_LCD:
     # --------------------------------------------------------------#
 
     def Goto_MainMenu(self):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Goto_MainMenu")
-            return
         self.checkkey = self.MainMenu
         self.Clear_Main_Window()
 
@@ -2145,9 +2141,6 @@ class DWIN_LCD:
             self.ICON_StartInfo(self.select_page.now == 3)
 
     def Goto_PrintProcess(self):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Goto_PrintProcess")
-            return
         self.checkkey = self.PrintProcess
         self.Clear_Main_Window()
         self.Draw_Printing_Screen()
