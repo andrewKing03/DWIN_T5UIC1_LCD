@@ -263,24 +263,14 @@ class PrinterData:
 			self.status = None
 			print(f'Moonraker base address: {self.op.base_address}')
 			
-			# Initialize Klippy socket with retry logic (restored to original behavior)
+			# Initialize Klippy socket with error handling
 			socket_path = '/home/pi/printer_data/comms/klippy.sock'
-			self.ks = None
-			klippy_connect_timeout = 30  # seconds
-			klippy_connect_start = time.time()
-			while True:
-				try:
-					self.ks = KlippySocket(socket_path, callback=self.klippy_callback)
-					print(f'Connected to Klippy socket at {socket_path}')
-					break
-				except Exception as e:
-					if time.time() - klippy_connect_start > klippy_connect_timeout:
-						print(f'Warning: Could not connect to Klippy socket at {socket_path} after {klippy_connect_timeout} seconds: {e}')
-						self.ks = None
-						break
-					print(f'Waiting for Klippy socket at {socket_path}... ({e})')
-					time.sleep(1)
-
+			try:
+				self.ks = KlippySocket(socket_path, callback=self.klippy_callback)
+			except Exception as e:
+				print(f'Warning: Could not connect to Klippy socket at {socket_path}: {e}')
+				self.ks = None
+			
 			# Set up Klippy subscriptions if socket is available
 			if self.ks:
 				subscribe = {
