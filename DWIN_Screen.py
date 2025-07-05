@@ -2,17 +2,6 @@ import time
 import math
 import serial
 import struct
-import threading
-
-
-def _MAX(lhs, rhs):
-	"""Helper function for max comparison"""
-	return lhs if lhs > rhs else rhs
-
-
-def _MIN(lhs, rhs):
-	"""Helper function for min comparison"""
-	return lhs if lhs < rhs else rhs
 
 
 class T5UIC1_LCD:
@@ -67,173 +56,44 @@ class T5UIC1_LCD:
 	# Passing parameters: serial port number
 	# DWIN screen uses serial port 1 to send
 	def __init__(self, USARTx):
-		"""Initialize DWIN screen with comprehensive error handling"""
-		self._initialized = False
-		self.lock = threading.Lock()  # Thread safety for serial operations
-		
-		try:
-			# Validate input
-			if not USARTx:
-				raise ValueError("USARTx parameter cannot be empty")
-			
-			print(f"\nInitializing DWIN display on {USARTx}")
-			
-			# Initialize serial connection with error handling
-			try:
-				self.MYSERIAL1 = serial.Serial(
-					USARTx, 
-					115200, 
-					timeout=2,  # Increased timeout for reliability
-					write_timeout=2,  # Add write timeout
-					exclusive=True  # Prevent multiple access
-				)
-				print(f"Serial connection established: {USARTx}")
-			except serial.SerialException as e:
-				raise RuntimeError(f"Failed to open serial port {USARTx}: {e}")
-			except Exception as e:
-				raise RuntimeError(f"Serial port initialization error: {e}")
-			
-			# Initialize communication
-			print("Starting DWIN handshake...")
-			handshake_attempts = 0
-			max_handshake_attempts = 5
-			
-			while handshake_attempts < max_handshake_attempts:
-				handshake_attempts += 1
-				try:
-					if self.Handshake():
-						print("DWIN handshake successful")
-						break
-				except Exception as e:
-					print(f"Handshake attempt {handshake_attempts} failed: {e}")
-					if handshake_attempts < max_handshake_attempts:
-						time.sleep(0.5)  # Wait before retry
-						continue
-					else:
-						raise RuntimeError(f"Failed to establish handshake after {max_handshake_attempts} attempts")
-			else:
-				raise RuntimeError("DWIN handshake failed - display may not be connected or responding")
-			
-			# Initialize display
-			try:
-				self.JPG_ShowAndCache(0)
-				self.Frame_SetDir(1)
-				self.UpdateLCD()
-				print("DWIN display initialized successfully")
-				self._initialized = True
-			except Exception as e:
-				raise RuntimeError(f"Failed to initialize display: {e}")
-				
-		except Exception as e:
-			print(f"Error initializing DWIN screen: {e}")
-			self.cleanup()
-			raise
+		self.MYSERIAL1 = serial.Serial(USARTx, 115200, timeout=1)
+		# self.bus = SMBus(1)
+		# self.DWIN_SendBuf = self.FHONE
+		print("\nDWIN handshake ")
+		while not self.Handshake():
+			pass
+		print("DWIN OK.")
+		self.JPG_ShowAndCache(0)
+		self.Frame_SetDir(1)
+		self.UpdateLCD()
 
 	def Byte(self, bval):
-		"""Add byte to buffer with validation"""
-		try:
-			if not isinstance(bval, (int, float)):
-				raise ValueError(f"Byte value must be numeric, got {type(bval)}")
-			val = int(bval)
-			if val < 0 or val > 255:
-				raise ValueError(f"Byte value must be 0-255, got {val}")
-			self.DWIN_SendBuf += val.to_bytes(1, byteorder='big')
-		except Exception as e:
-			print(f"Error adding byte to buffer: {e}")
-			raise
+		self.DWIN_SendBuf += int(bval).to_bytes(1, byteorder='big')
 
 	def Word(self, wval):
-		"""Add word to buffer with validation"""
-		try:
-			if not isinstance(wval, (int, float)):
-				raise ValueError(f"Word value must be numeric, got {type(wval)}")
-			val = int(wval)
-			if val < 0 or val > 65535:
-				raise ValueError(f"Word value must be 0-65535, got {val}")
-			self.DWIN_SendBuf += val.to_bytes(2, byteorder='big')
-		except Exception as e:
-			print(f"Error adding word to buffer: {e}")
-			raise
+		self.DWIN_SendBuf += int(wval).to_bytes(2, byteorder='big')
 
 	def Long(self, lval):
-		"""Add long to buffer with validation"""
-		try:
-			if not isinstance(lval, (int, float)):
-				raise ValueError(f"Long value must be numeric, got {type(lval)}")
-			val = int(lval)
-			if val < 0 or val > 4294967295:
-				raise ValueError(f"Long value must be 0-4294967295, got {val}")
-			self.DWIN_SendBuf += val.to_bytes(4, byteorder='big')
-		except Exception as e:
-			print(f"Error adding long to buffer: {e}")
-			raise
+		self.DWIN_SendBuf += int(lval).to_bytes(4, byteorder='big')
 
 	def D64(self, value):
-		"""Add 64-bit value to buffer with validation"""
-		try:
-			if not isinstance(value, (int, float)):
-				raise ValueError(f"D64 value must be numeric, got {type(value)}")
-			val = int(value)
-			if val < 0 or val > 18446744073709551615:
-				raise ValueError(f"D64 value out of range: {val}")
-			self.DWIN_SendBuf += val.to_bytes(8, byteorder='big')
-		except Exception as e:
-			print(f"Error adding D64 to buffer: {e}")
-			raise
+		self.DWIN_SendBuf += int(value).to_bytes(8, byteorder='big')
 
 	def String(self, string):
-		"""Add string to buffer with validation"""
-		try:
-			if not isinstance(string, str):
-				string = str(string)
-			if len(string) > 255:  # Reasonable limit for display strings
-				print(f"Warning: String truncated from {len(string)} to 255 characters")
-				string = string[:255]
-			self.DWIN_SendBuf += string.encode('utf-8')
-		except Exception as e:
-			print(f"Error adding string to buffer: {e}")
-			raise
+		self.DWIN_SendBuf += string.encode('utf-8')
 
 	# Send the data in the buffer and the packet end
 	def Send(self):
-		"""Send buffer contents with comprehensive error handling"""
-		if not self._initialized:
-			print("Warning: Attempting to send data before initialization complete")
-			return False
-			
-		try:
-			with self.lock:  # Thread safety
-				if not self.DWIN_SendBuf:
-					print("Warning: Empty send buffer")
-					return False
-				
-				# Check serial connection
-				if not self.MYSERIAL1 or not self.MYSERIAL1.is_open:
-					raise RuntimeError("Serial port is not open")
-				
-				# Send data
-				bytes_written = 0
-				try:
-					bytes_written += self.MYSERIAL1.write(self.DWIN_SendBuf)
-					bytes_written += self.MYSERIAL1.write(self.DWIN_BufTail)
-					self.MYSERIAL1.flush()  # Ensure data is sent
-				except serial.SerialTimeoutException:
-					print("Warning: Serial write timeout")
-					return False
-				except Exception as e:
-					print(f"Error writing to serial port: {e}")
-					return False
-				
-				# Reset buffer
-				self.DWIN_SendBuf = self.FHONE
-				time.sleep(0.001)  # Brief delay for hardware processing
-				
-				return True
-				
-		except Exception as e:
-			print(f"Error in Send(): {e}")
-			self.DWIN_SendBuf = self.FHONE  # Reset buffer even on error
-			return False
+		# for i in self.DWIN_BufTail:
+		# 	self.Byte(i)
+		# self.bus.write_i2c_block_data(self.address, 0, self.DWIN_SendBuf)
+		# self.bus.write_i2c_block_data(self.address, 0, self.DWIN_BufTail)
+
+		self.MYSERIAL1.write(self.DWIN_SendBuf)
+		self.MYSERIAL1.write(self.DWIN_BufTail)
+
+		self.DWIN_SendBuf = self.FHONE
+		time.sleep(0.001)
 
 	def Read(self, lend=1):
 		bit = self.bus.read_i2c_block_data(self.address, 0, lend)
@@ -245,159 +105,54 @@ class T5UIC1_LCD:
 
 	# Handshake (1: Success, 0: Fail)
 	def Handshake(self):
-		"""Perform handshake with comprehensive error handling and timeout"""
-		try:
-			# Reset communication state
-			self.recnum = 0
-			self.databuf = [None] * 26
-			
-			# Clear any pending data
-			if self.MYSERIAL1.in_waiting:
-				self.MYSERIAL1.reset_input_buffer()
-			
-			# Send handshake command
-			self.Byte(0x00)
-			if not self.Send():
-				return False
-			
-			# Wait for response with timeout
-			timeout_start = time.time()
-			timeout_duration = 2.0  # 2 second timeout
-			
-			while self.recnum < 26 and (time.time() - timeout_start) < timeout_duration:
-				if self.MYSERIAL1.in_waiting:
-					try:
-						byte_data = self.MYSERIAL1.read(1)
-						if not byte_data:
-							continue
-							
-						self.databuf[self.recnum] = struct.unpack('B', byte_data)[0]
-						
-						# Validate start byte
-						if self.databuf[0] != 0xAA:
-							if self.recnum > 0:
-								self.recnum = 0
-								self.databuf = [None] * 26
-							continue
-						
-						self.recnum += 1
-						
-						# Check if we have enough data for validation
-						if self.recnum >= 4:
-							break
-							
-					except struct.error as e:
-						print(f"Error unpacking handshake data: {e}")
-						continue
-					except Exception as e:
-						print(f"Error reading handshake response: {e}")
-						return False
-				else:
-					time.sleep(0.010)  # Small delay before checking again
-			
-			# Validate handshake response
-			success = (self.recnum >= 3 and 
-					  self.databuf[0] == 0xAA and 
-					  self.databuf[1] == 0)
-			
-			if success and self.recnum >= 4:
-				try:
-					char2 = chr(self.databuf[2]) if self.databuf[2] < 128 else '?'
-					char3 = chr(self.databuf[3]) if self.databuf[3] < 128 else '?'
-					success = success and char2 == 'O' and char3 == 'K'
-				except (ValueError, IndexError):
-					success = False
-			
-			if success:
-				print("Handshake completed successfully")
-			else:
-				print(f"Handshake failed - received {self.recnum} bytes: {self.databuf[:self.recnum]}")
-			
-			return success
-			
-		except Exception as e:
-			print(f"Exception during handshake: {e}")
-			return False
+		i = 0
+		self.Byte(0x00)
+		self.Send()
+		time.sleep(0.1)
+		# while (self.recnum < 26):
+		while (self.MYSERIAL1.in_waiting and self.recnum < 26):
+			# self.databuf[self.recnum] = struct.unpack('B', self.Read())[0]
+			self.databuf[self.recnum] = struct.unpack('B', self.MYSERIAL1.read())[0]
+
+			# ignore the invalid data
+			if self.databuf[0] != 0xAA:  # prevent the program from running.
+				if(self.recnum > 0):
+					self.recnum = 0
+					self.databuf = [None] * 26
+				continue
+			time.sleep(.010)
+			self.recnum += 1
+		return (self.recnum >= 3 and self.databuf[0] == 0xAA and self.databuf[1] == 0 and chr(self.databuf[2]) == 'O' and chr(self.databuf[3]) == 'K')
 
 	# Set the backlight luminance
 	#  luminance: (0x00-0xFF)
 	def Backlight_SetLuminance(self, luminance):
-		"""Set backlight with input validation and error handling"""
-		try:
-			if not isinstance(luminance, (int, float)):
-				raise ValueError(f"Luminance must be numeric, got {type(luminance)}")
-			
-			# Clamp luminance to valid range
-			luminance = int(luminance)
-			if luminance < 0:
-				luminance = 0
-			elif luminance > 255:
-				luminance = 255
-			
-			# Apply minimum brightness (0x1F = 31)
-			safe_luminance = _MAX(luminance, 0x1F)
-			
-			self.Byte(0x30)
-			self.Byte(safe_luminance)
-			return self.Send()
-			
-		except Exception as e:
-			print(f"Error setting backlight luminance: {e}")
-			return False
+		self.Byte(0x30)
+		self.Byte(_MAX(luminance, 0x1F))
+		self.Send()
 
 	# Set screen display direction
 	#  dir: 0=0°, 1=90°, 2=180°, 3=270°
 	def Frame_SetDir(self, dir):
-		"""Set frame direction with input validation"""
-		try:
-			if not isinstance(dir, (int, float)):
-				raise ValueError(f"Direction must be numeric, got {type(dir)}")
-			
-			dir = int(dir)
-			if dir < 0 or dir > 3:
-				raise ValueError(f"Direction must be 0-3, got {dir}")
-			
-			self.Byte(0x34)
-			self.Byte(0x5A)
-			self.Byte(0xA5)
-			self.Byte(dir)
-			return self.Send()
-			
-		except Exception as e:
-			print(f"Error setting frame direction: {e}")
-			return False
+		self.Byte(0x34)
+		self.Byte(0x5A)
+		self.Byte(0xA5)
+		self.Byte(dir)
+		self.Send()
 
 	# Update display
 	def UpdateLCD(self):
-		"""Update LCD display with error handling"""
-		try:
-			self.Byte(0x3D)
-			return self.Send()
-		except Exception as e:
-			print(f"Error updating LCD: {e}")
-			return False
+		self.Byte(0x3D)
+		self.Send()
 
 	# /*---------------------------------------- Drawing functions ----------------------------------------*/
 
 	# Clear screen
 	#  color: Clear screen color
 	def Frame_Clear(self, color):
-		"""Clear screen with input validation"""
-		try:
-			if not isinstance(color, (int, float)):
-				raise ValueError(f"Color must be numeric, got {type(color)}")
-			
-			color = int(color)
-			if color < 0 or color > 65535:
-				raise ValueError(f"Color must be 0-65535, got {color}")
-			
-			self.Byte(0x01)
-			self.Word(color)
-			return self.Send()
-			
-		except Exception as e:
-			print(f"Error clearing frame: {e}")
-			return False
+		self.Byte(0x01)
+		self.Word(color)
+		self.Send()
 
 	# Draw a point
 	#  width: point width   0x01-0x0F
@@ -448,33 +203,14 @@ class T5UIC1_LCD:
 	#   xStart/yStart: upper left point
 	#   xEnd/yEnd: lower right point
 	def Draw_Rectangle(self, mode, color, xStart, yStart, xEnd, yEnd):
-		"""Draw rectangle with input validation"""
-		def build_command():
-			# Validate mode
-			if not (0 <= int(mode) <= 2):
-				raise ValueError(f"Mode must be 0-2, got {mode}")
-			
-			# Validate and clamp coordinates
-			x1 = _MAX(0, _MIN(int(xStart), self.DWIN_WIDTH - 1))
-			y1 = _MAX(0, _MIN(int(yStart), self.DWIN_HEIGHT - 1))
-			x2 = _MAX(0, _MIN(int(xEnd), self.DWIN_WIDTH - 1))
-			y2 = _MAX(0, _MIN(int(yEnd), self.DWIN_HEIGHT - 1))
-			
-			# Ensure proper ordering
-			if x1 > x2:
-				x1, x2 = x2, x1
-			if y1 > y2:
-				y1, y2 = y2, y1
-			
-			self.Byte(0x05)
-			self.Byte(int(mode))
-			self.Word(int(color))
-			self.Word(x1)
-			self.Word(y1)
-			self.Word(x2)
-			self.Word(y2)
-		
-		return self._safe_send_command(build_command)
+		self.Byte(0x05)
+		self.Byte(mode)
+		self.Word(color)
+		self.Word(xStart)
+		self.Word(yStart)
+		self.Word(xEnd)
+		self.Word(yEnd)
+		self.Send()
 
 	#  Move a screen area
 	#   mode: 0, circle shift; 1, translation
@@ -554,32 +290,18 @@ class T5UIC1_LCD:
 	#   x/y: Upper-left coordinate of the string
 	#   *string: The string
 	def Draw_String(self, widthAdjust, bShow, size, color, bColor, x, y, string):
-		"""Draw string with comprehensive input validation"""
-		def build_command():
-			# Validate inputs
-			if not isinstance(string, str):
-				raise ValueError("String must be a string type")
-			if len(string) > 100:  # Reasonable limit
-				raise ValueError(f"String too long: {len(string)} characters")
-			
-			# Validate coordinates
-			if not (0 <= x < self.DWIN_WIDTH and 0 <= y < self.DWIN_HEIGHT):
-				raise ValueError(f"Coordinates out of bounds: ({x}, {y})")
-			
-			# Validate font size
-			if not (0 <= size <= 9):
-				raise ValueError(f"Font size must be 0-9, got {size}")
-			
-			self.Byte(0x11)
-			# Bit 7: widthAdjust, Bit 6: bShow, Bit 5-4: Unused (0), Bit 3-0: size
-			self.Byte((bool(widthAdjust) * 0x80) | (bool(bShow) * 0x40) | int(size))
-			self.Word(int(color))
-			self.Word(int(bColor))
-			self.Word(int(x))
-			self.Word(int(y))
-			self.String(string)
-		
-		return self._safe_send_command(build_command)
+		self.Byte(0x11)
+		# Bit 7: widthAdjust
+		# Bit 6: bShow
+		# Bit 5-4: Unused (0)
+		# Bit 3-0: size
+		self.Byte((widthAdjust * 0x80) | (bShow * 0x40) | size)
+		self.Word(color)
+		self.Word(bColor)
+		self.Word(x)
+		self.Word(y)
+		self.String(string)
+		self.Send()
 
 	#  Draw a positive integer
 	#   bShow: True=display background color; False=don't display background color
@@ -592,36 +314,21 @@ class T5UIC1_LCD:
 	#   x/y: Upper-left coordinate
 	#   value: Integer value
 	def Draw_IntValue(self, bShow, zeroFill, zeroMode, size, color, bColor, iNum, x, y, value):
-		"""Draw integer value with comprehensive validation"""
-		def build_command():
-			# Validate coordinates
-			if not (0 <= int(x) < self.DWIN_WIDTH and 0 <= int(y) < self.DWIN_HEIGHT):
-				raise ValueError(f"Coordinates out of bounds: ({x}, {y})")
-			
-			# Validate font size
-			if not (0 <= int(size) <= 9):
-				raise ValueError(f"Font size must be 0-9, got {size}")
-			
-			# Validate digit count
-			if not (1 <= int(iNum) <= 10):
-				raise ValueError(f"Digit count must be 1-10, got {iNum}")
-			
-			# Validate value range (64-bit)
-			if not (-9223372036854775808 <= int(value) <= 9223372036854775807):
-				raise ValueError(f"Value out of range: {value}")
-			
-			self.Byte(0x14)
-			# Bit 7: bshow, Bit 6: 1 = signed; 0 = unsigned, Bit 5: zeroFill, Bit 4: zeroMode, Bit 3-0: size
-			self.Byte((bool(bShow) * 0x80) | (bool(zeroFill) * 0x20) | (bool(zeroMode) * 0x10) | int(size))
-			self.Word(int(color))
-			self.Word(int(bColor))
-			self.Byte(int(iNum))
-			self.Byte(0)  # fNum
-			self.Word(int(x))
-			self.Word(int(y))
-			self.D64(int(value))
-		
-		return self._safe_send_command(build_command)
+		self.Byte(0x14)
+		# Bit 7: bshow
+		# Bit 6: 1 = signed; 0 = unsigned number;
+		# Bit 5: zeroFill
+		# Bit 4: zeroMode
+		# Bit 3-0: size
+		self.Byte((bShow * 0x80) | (zeroFill * 0x20) | (zeroMode * 0x10) | size)
+		self.Word(color)
+		self.Word(bColor)
+		self.Byte(iNum)
+		self.Byte(0)  # fNum
+		self.Word(x)
+		self.Word(y)
+		self.D64(value)
+		self.Send()
 
 	#  Draw a floating point number
 	#   bShow: True=display background color; False=don't display background color
@@ -635,107 +342,49 @@ class T5UIC1_LCD:
 	#   x/y: Upper-left point
 	#   value: Float value
 	def Draw_FloatValue(self, bShow, zeroFill, zeroMode, size, color, bColor, iNum, fNum, x, y, value):
-		"""Draw float value with comprehensive validation"""
-		def build_command():
-			# Validate coordinates
-			if not (0 <= int(x) < self.DWIN_WIDTH and 0 <= int(y) < self.DWIN_HEIGHT):
-				raise ValueError(f"Coordinates out of bounds: ({x}, {y})")
-			
-			# Validate font size
-			if not (0 <= int(size) <= 9):
-				raise ValueError(f"Font size must be 0-9, got {size}")
-			
-			# Validate digit counts
-			if not (1 <= int(iNum) <= 10):
-				raise ValueError(f"Integer digits must be 1-10, got {iNum}")
-			if not (0 <= int(fNum) <= 10):
-				raise ValueError(f"Fraction digits must be 0-10, got {fNum}")
-			
-			# Convert float to appropriate integer representation
-			try:
-				int_value = int(float(value))
-			except (ValueError, OverflowError):
-				raise ValueError(f"Invalid float value: {value}")
-			
-			self.Byte(0x14)
-			self.Byte((bool(bShow) * 0x80) | (bool(zeroFill) * 0x20) | (bool(zeroMode) * 0x10) | int(size))
-			self.Word(int(color))
-			self.Word(int(bColor))
-			self.Byte(int(iNum))
-			self.Byte(int(fNum))
-			self.Word(int(x))
-			self.Word(int(y))
-			self.Long(int_value)
-		
-		return self._safe_send_command(build_command)
+		self.Byte(0x14)
+		self.Byte((bShow * 0x80) | (zeroFill * 0x20) | (zeroMode * 0x10) | size)
+		self.Word(color)
+		self.Word(bColor)
+		self.Byte(iNum)
+		self.Byte(fNum)
+		self.Word(x)
+		self.Word(y)
+		self.Long(value)
+		self.Send()
 
 	def Draw_Signed_Float(self, size, bColor, iNum, fNum, x, y, value):
-		"""Draw signed float with improved error handling"""
-		try:
-			float_value = float(value)
-			
-			if float_value < 0:
-				# Draw negative sign
-				if not self.Draw_String(False, True, size, self.Color_White, bColor, x - 6, y, "-"):
-					return False
-				if not self.Draw_FloatValue(True, True, 0, size, self.Color_White, bColor, iNum, fNum, x, y, -float_value):
-					return False
-			else:
-				# Draw space for positive numbers
-				if not self.Draw_String(False, True, size, self.Color_White, bColor, x - 6, y, " "):
-					return False
-				if not self.Draw_FloatValue(True, True, 0, size, self.Color_White, bColor, iNum, fNum, x, y, float_value):
-					return False
-			
-			return True
-			
-		except (ValueError, TypeError) as e:
-			print(f"Error drawing signed float: {e}")
-			return False
+		if value < 0:
+			self.Draw_String(False, True, size, self.Color_White, bColor, x - 6, y, "-")
+			self.Draw_FloatValue(True, True, 0, size, self.Color_White, bColor, iNum, fNum, x, y, -value)
+		else:
+			self.Draw_String(False, True, size, self.Color_White, bColor, x - 6, y, " ")
+			self.Draw_FloatValue(True, True, 0, size, self.Color_White, bColor, iNum, fNum, x, y, value)
 
 	# /*---------------------------------------- Picture related functions ----------------------------------------*/
 
-	#  Draw JPG and cached in #0 virtual display area
+	# Draw JPG and cached in #0 virtual display area
 	# id: Picture ID
 	def JPG_ShowAndCache(self, id):
-		"""Show and cache JPG with input validation"""
-		def build_command():
-			if not isinstance(id, (int, float)):
-				raise ValueError(f"Picture ID must be numeric, got {type(id)}")
-			
-			pic_id = int(id)
-			if pic_id < 0 or pic_id > 255:
-				raise ValueError(f"Picture ID must be 0-255, got {pic_id}")
-			
-			self.Word(0x2200)
-			self.Byte(pic_id)
-		
-		return self._safe_send_command(build_command)
+		self.Word(0x2200)
+		self.Byte(id)
+		self.Send()  # AA 23 00 00 00 00 08 00 01 02 03 CC 33 C3 3C
 
 	#  Draw an Icon
 	#   libID: Icon library ID
 	#   picID: Icon ID
 	#   x/y: Upper-left point
 	def ICON_Show(self, libID, picID, x, y):
-		"""Show icon with input validation and bounds checking"""
-		def build_command():
-			# Validate coordinates and clamp to screen bounds
-			safe_x = _MAX(0, _MIN(int(x), self.DWIN_WIDTH - 1))
-			safe_y = _MAX(0, _MIN(int(y), self.DWIN_HEIGHT - 1))
-			
-			# Validate IDs
-			if not (0 <= int(libID) <= 127):  # 7-bit limit due to 0x80 OR
-				raise ValueError(f"Library ID must be 0-127, got {libID}")
-			if not (0 <= int(picID) <= 255):
-				raise ValueError(f"Picture ID must be 0-255, got {picID}")
-			
-			self.Byte(0x23)
-			self.Word(safe_x)
-			self.Word(safe_y)
-			self.Byte(0x80 | int(libID))
-			self.Byte(int(picID))
-		
-		return self._safe_send_command(build_command)
+		if x > self.DWIN_WIDTH - 1:
+			x = self.DWIN_WIDTH - 1
+		if y > self.DWIN_HEIGHT - 1:
+			y = self.DWIN_HEIGHT - 1
+		self.Byte(0x23)
+		self.Word(x)
+		self.Word(y)
+		self.Byte(0x80 | libID)
+		self.Byte(picID)
+		self.Send()
 
 	# Unzip the JPG picture to a virtual display area
 	#  n: Cache index
@@ -862,62 +511,3 @@ class T5UIC1_LCD:
 
 	# --------------------------------------------------------------#
 	# --------------------------------------------------------------#
-
-	def _safe_send_command(self, command_builder):
-		"""Safely execute a command building function and send it"""
-		try:
-			if not self._initialized:
-				print("Warning: Display not initialized")
-				return False
-				
-			# Execute the command builder
-			command_builder()
-			return self.Send()
-			
-		except Exception as e:
-			print(f"Error executing display command: {e}")
-			# Reset buffer on error
-			self.DWIN_SendBuf = self.FHONE
-			return False
-
-	def cleanup(self):
-		"""Clean up resources"""
-		try:
-			print("Cleaning up DWIN display...")
-			
-			# Clear display if possible
-			if self._initialized and hasattr(self, 'MYSERIAL1') and self.MYSERIAL1:
-				try:
-					self.Frame_Clear(self.Color_Bg_Black)
-				except:
-					pass  # Ignore errors during cleanup
-			
-			# Close serial connection
-			if hasattr(self, 'MYSERIAL1') and self.MYSERIAL1:
-				try:
-					self.MYSERIAL1.close()
-					print("Serial connection closed")
-				except Exception as e:
-					print(f"Error closing serial connection: {e}")
-			
-			self._initialized = False
-			
-		except Exception as e:
-			print(f"Error during cleanup: {e}")
-
-	def __del__(self):
-		"""Destructor to ensure cleanup"""
-		try:
-			self.cleanup()
-		except:
-			pass  # Ignore errors in destructor
-
-	def is_connected(self):
-		"""Check if display is connected and responding"""
-		try:
-			return (self._initialized and 
-					hasattr(self, 'MYSERIAL1') and 
-					self.MYSERIAL1 and 
-					self.MYSERIAL1.is_open)
-		except:
-			return False

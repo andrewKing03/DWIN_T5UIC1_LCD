@@ -303,173 +303,39 @@ class DWIN_LCD:
 	# Passing parameters: serial port number
 	# DWIN screen uses serial port 1 to send
 	def __init__(self, USARTx, encoder_pins, button_pin, octoPrint_API_Key):
-		"""Initialize DWIN LCD with comprehensive error handling"""
-		print("Initializing DWIN LCD...")
-		
-		# Validate inputs
-		if not octoPrint_API_Key or not isinstance(octoPrint_API_Key, str):
-			raise ValueError("octoPrint_API_Key must be a non-empty string")
-		
-		if not encoder_pins or len(encoder_pins) != 2:
-			raise ValueError("encoder_pins must be a list/tuple of 2 GPIO pin numbers")
-		
-		# Initialize GPIO with error handling
-		try:
-			GPIO.setmode(GPIO.BCM)
-			print("GPIO mode set to BCM")
-		except Exception as e:
-			print(f"Warning: GPIO mode setting failed: {e}")
-		
-		# Initialize encoder
-		try:
-			self.encoder = Encoder(encoder_pins[0], encoder_pins[1])
-			print(f"Encoder initialized on pins {encoder_pins}")
-		except Exception as e:
-			print(f"Error initializing encoder: {e}")
-			raise
-		
-		# Initialize button
-		try:
-			self.button_pin = button_pin
-			GPIO.setup(self.button_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-			GPIO.add_event_detect(self.button_pin, GPIO.BOTH, callback=self.encoder_has_data)
-			print(f"Button initialized on pin {button_pin}")
-		except Exception as e:
-			print(f"Error initializing button: {e}")
-			raise
-		
-		# Set encoder callback
-		try:
-			self.encoder.callback = self.encoder_has_data
-		except Exception as e:
-			print(f"Warning: Could not set encoder callback: {e}")
-		
-		# Initialize timing variables
+		GPIO.setmode(GPIO.BCM)
+		self.encoder = Encoder(encoder_pins[0], encoder_pins[1])
+		self.button_pin = button_pin
+		GPIO.setup(self.button_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+		GPIO.add_event_detect(self.button_pin, GPIO.BOTH, callback=self.encoder_has_data)
+		self.encoder.callback = self.encoder_has_data
 		self.EncodeLast = 0
 		self.EncodeMS = current_milli_time() + self.ENCODER_WAIT
 		self.EncodeEnter = current_milli_time() + self.ENCODER_WAIT_ENTER
 		self.next_rts_update_ms = 0
 		self.last_cardpercentValue = 101
-		
-		# Initialize LCD
-		try:
-			self.lcd = T5UIC1_LCD(USARTx)
-			print("LCD interface initialized")
-		except Exception as e:
-			print(f"Error initializing LCD: {e}")
-			raise
-		
-		# Initialize state
+		self.lcd = T5UIC1_LCD(USARTx)
 		self.checkkey = self.MainMenu
-		
-		# Initialize printer interface
-		try:
-			self.pd = PrinterData(octoPrint_API_Key)
-			print("Printer interface initialized")
-		except Exception as e:
-			print(f"Error initializing printer interface: {e}")
-			raise
-		
-		# Initialize timer
-		try:
-			self.timer = multitimer.MultiTimer(interval=2, function=self.EachMomentUpdate)
-			print("Update timer initialized")
-		except Exception as e:
-			print(f"Error initializing timer: {e}")
-			raise
-		
-		# Show boot screen
+		self.pd = PrinterData(octoPrint_API_Key)
+		self.timer = multitimer.MultiTimer(interval=2, function=self.EachMomentUpdate)
 		self.HMI_ShowBoot()
 		print("Boot looks good")
 		print("Testing Web-services")
-		
-		# Try to initialize web services with timeout
-		max_attempts = 10
-		attempt = 0
-		init_success = False
-		
-		while attempt < max_attempts and not init_success:
-			attempt += 1
-			print(f"Web-service connection attempt {attempt}/{max_attempts}")
-			
-			try:
-				init_success = self.pd.init_Webservices()
-				if init_success and self.pd.status is not None:
-					print("Web-services initialized successfully")
-					break
-				elif self.pd.status is None:
-					print("Web-services connected but status not available")
-					time.sleep(2)  # Wait before retry
-					self.HMI_ShowBoot(f"Web-service loading... (attempt {attempt})")
-				else:
-					print("Web-services initialization failed")
-					time.sleep(2)
-					self.HMI_ShowBoot(f"Retrying connection... (attempt {attempt})")
-			except Exception as e:
-				print(f"Error during web-service initialization: {e}")
-				time.sleep(2)
-				self.HMI_ShowBoot(f"Connection error, retrying... (attempt {attempt})")
-		
-		if not init_success:
-			print("WARNING: Failed to initialize web services after all attempts")
-			print("LCD will continue with limited functionality")
-			self.HMI_ShowBoot("Web-service connection failed - limited mode")
-			time.sleep(3)
-		
+		self.pd.init_Webservices()
+		while self.pd.status is None:
+			print("No Web-services")
+			self.pd.init_Webservices()
+			self.HMI_ShowBoot("Web-service still loading")
 		self.HMI_Init()
 		self.HMI_StartFrame(False)
-		print("DWIN LCD initialization complete")
 
 	def lcdExit(self):
-		"""Shutdown LCD with comprehensive cleanup"""
 		print("Shutting down the LCD")
-		try:
-			# Stop the update timer
-			if hasattr(self, 'timer'):
-				try:
-					self.timer.stop()
-					print("Timer stopped")
-				except Exception as e:
-					print(f"Error stopping timer: {e}")
-			
-			# Clean up LCD display
-			try:
-				if hasattr(self, 'lcd'):
-					self.lcd.JPG_ShowAndCache(0)
-					self.lcd.Frame_SetDir(1)
-					self.lcd.UpdateLCD()
-					print("LCD display cleared")
-			except Exception as e:
-				print(f"Error cleaning up LCD: {e}")
-			
-			# Clean up encoder
-			try:
-				if hasattr(self, 'encoder'):
-					self.encoder.cleanup()
-					print("Encoder cleaned up")
-			except Exception as e:
-				print(f"Error cleaning up encoder: {e}")
-			
-			# Clean up GPIO
-			try:
-				if hasattr(self, 'button_pin'):
-					GPIO.remove_event_detect(self.button_pin)
-					print("GPIO event detection removed")
-			except Exception as e:
-				print(f"Error cleaning up GPIO: {e}")
-			
-			# Clean up printer interface
-			try:
-				if hasattr(self, 'pd') and hasattr(self.pd, 'ks') and self.pd.ks:
-					self.pd.ks.klippyExit()
-					print("Klippy socket closed")
-			except Exception as e:
-				print(f"Error cleaning up printer interface: {e}")
-				
-		except Exception as e:
-			print(f"Error during LCD shutdown: {e}")
-		
-		print("LCD shutdown complete")
+		self.lcd.JPG_ShowAndCache(0)
+		self.lcd.Frame_SetDir(1)
+		self.lcd.UpdateLCD()
+		self.timer.stop()
+		GPIO.remove_event_detect(self.button_pin)
 
 	def MBASE(self, L):
 		return 49 + self.MLINE * L
@@ -575,79 +441,52 @@ class DWIN_LCD:
 		self.lcd.UpdateLCD()
 
 	def HMI_SelectFile(self):
-		"""Handle file selection with error checking"""
-		try:
-			encoder_diffState = self.get_encoder_state()
-			if (encoder_diffState == self.ENCODER_DIFF_NO):
-				return
+		encoder_diffState = self.get_encoder_state()
+		if (encoder_diffState == self.ENCODER_DIFF_NO):
+			return
 
-			try:
-				files = self.pd.GetFiles(refresh=True)
-				fullCnt = len(files) if files else 0
-			except Exception as e:
-				print(f"Error getting file list: {e}")
-				fullCnt = 0
-				files = []
+		fullCnt = len(self.pd.GetFiles(refresh=True))
 
-			if fullCnt == 0:
-				print("No files available")
-				if encoder_diffState == self.ENCODER_DIFF_ENTER:
-					self.select_page.set(0)
-					self.Goto_MainMenu()
-				return
-
-			if (encoder_diffState == self.ENCODER_DIFF_CW and fullCnt):
-				if (self.select_file.inc(1 + fullCnt)):
-					itemnum = self.select_file.now - 1  # -1 for "Back"
-					if (self.select_file.now > self.MROWS and self.select_file.now > self.index_file):  # Cursor past the bottom
-						self.index_file = self.select_file.now  # New bottom line
-						self.Scroll_Menu(self.DWIN_SCROLL_UP)
-						self.Draw_SDItem(itemnum, self.MROWS)  # Draw and init the shift name
-					else:
-						self.Move_Highlight(1, self.select_file.now + self.MROWS - self.index_file)  # Just move highlight
-			elif (encoder_diffState == self.ENCODER_DIFF_CCW and fullCnt):
-				if (self.select_file.dec()):
-					itemnum = self.select_file.now - 1  # -1 for "Back"
-					if (self.select_file.now < self.index_file - self.MROWS):  # Cursor past the top
-						self.index_file -= 1  # New bottom line
-						self.Scroll_Menu(self.DWIN_SCROLL_DOWN)
-						if (self.index_file == self.MROWS):
-							self.Draw_Back_First()
-						else:
-							self.Draw_SDItem(itemnum, 0)  # Draw the item (and init shift name)
-					else:
-						self.Move_Highlight(-1, self.select_file.now + self.MROWS - self.index_file)  # Just move highlight
-			elif (encoder_diffState == self.ENCODER_DIFF_ENTER):
-				if (self.select_file.now == 0):  # Back
-					self.select_page.set(0)
-					self.Goto_MainMenu()
+		if (encoder_diffState == self.ENCODER_DIFF_CW and fullCnt):
+			if (self.select_file.inc(1 + fullCnt)):
+				itemnum = self.select_file.now - 1  # -1 for "Back"
+				if (self.select_file.now > self.MROWS and self.select_file.now > self.index_file):  # Cursor past the bottom
+					self.index_file = self.select_file.now  # New bottom line
+					self.Scroll_Menu(self.DWIN_SCROLL_UP)
+					self.Draw_SDItem(itemnum, self.MROWS)  # Draw and init the shift name
 				else:
-					filenum = self.select_file.now - 1
-					if filenum >= 0 and filenum < fullCnt:
-						# Reset highlight for next entry
-						self.select_print.reset()
-						self.select_file.reset()
-
-						# Start choice and print SD file
-						self.pd.HMI_flag.heat_flag = True
-						self.pd.HMI_flag.print_finish = False
-						self.pd.HMI_ValueStruct.show_mode = 0
-
-						if self.pd.openAndPrintFile(filenum):
-							self.Goto_PrintProcess()
-						else:
-							print(f"Failed to start print for file {filenum}")
+					self.Move_Highlight(1, self.select_file.now + self.MROWS - self.index_file)  # Just move highlight
+		elif (encoder_diffState == self.ENCODER_DIFF_CCW and fullCnt):
+			if (self.select_file.dec()):
+				itemnum = self.select_file.now - 1  # -1 for "Back"
+				if (self.select_file.now < self.index_file - self.MROWS):  # Cursor past the top
+					self.index_file -= 1  # New bottom line
+					self.Scroll_Menu(self.DWIN_SCROLL_DOWN)
+					if (self.index_file == self.MROWS):
+						self.Draw_Back_First()
 					else:
-						print(f"Invalid file number: {filenum} (total files: {fullCnt})")
-
-			self.lcd.UpdateLCD()
-		except Exception as e:
-			print(f"Error in HMI_SelectFile: {e}")
-			# Try to return to main menu on error
-			try:
+						self.Draw_SDItem(itemnum, 0)  # Draw the item (and init shift name)
+				else:
+					self.Move_Highlight(-1, self.select_file.now + self.MROWS - self.index_file)  # Just move highlight
+		elif (encoder_diffState == self.ENCODER_DIFF_ENTER):
+			if (self.select_file.now == 0):  # Back
+				self.select_page.set(0)
 				self.Goto_MainMenu()
-			except Exception as recovery_error:
-				print(f"Failed to recover to main menu: {recovery_error}")
+			else:
+				filenum = self.select_file.now - 1
+				# Reset highlight for next entry
+				self.select_print.reset()
+				self.select_file.reset()
+
+				# // Start choice and print SD file
+				self.pd.HMI_flag.heat_flag = True
+				self.pd.HMI_flag.print_finish = False
+				self.pd.HMI_ValueStruct.show_mode = 0
+
+				self.pd.openAndPrintFile(filenum)
+				self.Goto_PrintProcess()
+
+		self.lcd.UpdateLCD()
 
 	def HMI_Prepare(self):
 		encoder_diffState = self.get_encoder_state()
@@ -2371,192 +2210,124 @@ class DWIN_LCD:
 	# --------------------------------------------------------------#
 
 	def EachMomentUpdate(self):
-		"""Periodic update with error handling"""
-		try:
-			# variable update
-			update = False
-			try:
-				update = self.pd.update_variable()
-			except Exception as e:
-				print(f"Error updating variables: {e}")
-				# Try to check web service health
-				try:
-					if not self.pd.check_webservice_health():
-						print("Web service health check failed")
-				except Exception:
-					pass  # Ignore health check errors
-			
-			# Handle status changes
-			if hasattr(self, 'last_status') and self.last_status != self.pd.status:
-				self.last_status = self.pd.status
-				print(f"Status changed to: {self.pd.status}")
-				try:
-					if self.pd.status == 'printing':
-						self.Goto_PrintProcess()
-					elif self.pd.status in ['operational', 'complete', 'standby', 'cancelled']:
-						self.Goto_MainMenu()
-				except Exception as e:
-					print(f"Error handling status change: {e}")
+		# variable update
+		update = self.pd.update_variable()
+		if self.last_status != self.pd.status:
+			self.last_status = self.pd.status
+			print(self.pd.status)
+			if self.pd.status == 'printing':
+				self.Goto_PrintProcess()
+			elif self.pd.status in ['operational', 'complete', 'standby', 'cancelled']:
+				self.Goto_MainMenu()
 
-			# Handle print process updates
-			if (self.checkkey == self.PrintProcess):
-				try:
-					if (self.pd.HMI_flag.print_finish and not self.pd.HMI_flag.done_confirm_flag):
-						self.pd.HMI_flag.print_finish = False
-						self.pd.HMI_flag.done_confirm_flag = True
-						# show percent bar and value
-						self.Draw_Print_ProgressBar(0)
-						# show print done confirm
-						self.lcd.Draw_Rectangle(1, self.lcd.Color_Bg_Black, 0, 250, self.lcd.DWIN_WIDTH - 1, self.STATUS_Y)
-						self.lcd.ICON_Show(self.ICON, self.ICON_Confirm_E, 86, 283)
-					elif (self.pd.HMI_flag.pause_flag != self.pd.printingIsPaused()):
-						# print status update
-						self.pd.HMI_flag.pause_flag = self.pd.printingIsPaused()
-						if (self.pd.HMI_flag.pause_flag):
-							self.ICON_Continue()
-						else:
-							self.ICON_Pause()
-					
-					self.Draw_Print_ProgressBar()
-					self.Draw_Print_ProgressElapsed()
-					self.Draw_Print_ProgressRemain()
-				except Exception as e:
-					print(f"Error updating print process display: {e}")
+		if (self.checkkey == self.PrintProcess):
+			if (self.pd.HMI_flag.print_finish and not self.pd.HMI_flag.done_confirm_flag):
+				self.pd.HMI_flag.print_finish = False
+				self.pd.HMI_flag.done_confirm_flag = True
+				# show percent bar and value
+				self.Draw_Print_ProgressBar(0)
+				# show print done confirm
+				self.lcd.Draw_Rectangle(1, self.lcd.Color_Bg_Black, 0, 250, self.lcd.DWIN_WIDTH - 1, self.STATUS_Y)
+				self.lcd.ICON_Show(self.ICON, self.ICON_Confirm_E, 86, 283)
+			elif (self.pd.HMI_flag.pause_flag != self.pd.printingIsPaused()):
+				# print status update
+				self.pd.HMI_flag.pause_flag = self.pd.printingIsPaused()
+				if (self.pd.HMI_flag.pause_flag):
+					self.ICON_Continue()
+				else:
+					self.ICON_Pause()
+			self.Draw_Print_ProgressBar()
+			self.Draw_Print_ProgressElapsed()
+			self.Draw_Print_ProgressRemain()
 
-			# Handle homing flag
-			try:
-				if self.pd.HMI_flag.home_flag:
-					if self.pd.ishomed():
-						self.CompletedHoming()
-			except Exception as e:
-				print(f"Error checking homing status: {e}")
+		if self.pd.HMI_flag.home_flag:
+			if self.pd.ishomed():
+				self.CompletedHoming()
 
-			# Update display
-			try:
-				if update:
-					self.Draw_Status_Area(update)
-				self.lcd.UpdateLCD()
-			except Exception as e:
-				print(f"Error updating LCD display: {e}")
-				
-		except Exception as e:
-			print(f"Critical error in EachMomentUpdate: {e}")
-			# Try to maintain basic functionality
+		if update:
+			self.Draw_Status_Area(update)
+		self.lcd.UpdateLCD()
 
 	def encoder_has_data(self, val):
-		"""Handle encoder events with error checking"""
-		try:
-			if self.checkkey == self.MainMenu:
-				self.HMI_MainMenu()
-			elif self.checkkey == self.SelectFile:
-				self.HMI_SelectFile()
-			elif self.checkkey == self.Prepare:
-				self.HMI_Prepare()
-			elif self.checkkey == self.Control:
-				self.HMI_Control()
-			elif self.checkkey == self.PrintProcess:
-				self.HMI_Printing()
-			elif self.checkkey == self.Print_window:
-				self.HMI_PauseOrStop()
-			elif self.checkkey == self.AxisMove:
-				self.HMI_AxisMove()
-			elif self.checkkey == self.TemperatureID:
-				self.HMI_Temperature()
-			elif self.checkkey == self.Motion:
-				self.HMI_Motion()
-			elif self.checkkey == self.Info:
-				self.HMI_Info()
-			elif self.checkkey == self.Tune:
-				self.HMI_Tune()
-			elif self.checkkey == self.PLAPreheat:
-				self.HMI_PLAPreheatSetting()
-			elif self.checkkey == self.ABSPreheat:
-				self.HMI_ABSPreheatSetting()
-			elif self.checkkey == self.MaxSpeed:
-				self.HMI_MaxSpeed()
-			elif self.checkkey == self.MaxAcceleration:
-				self.HMI_MaxAcceleration()
-			elif self.checkkey == self.MaxJerk:
-				self.HMI_MaxJerk()
-			elif self.checkkey == self.Step:
-				self.HMI_Step()
-			elif self.checkkey == self.Move_X:
-				self.HMI_Move_X()
-			elif self.checkkey == self.Move_Y:
-				self.HMI_Move_Y()
-			elif self.checkkey == self.Move_Z:
-				self.HMI_Move_Z()
-			elif self.checkkey == self.Extruder:
-				self.HMI_Move_E()
-			elif self.checkkey == self.ETemp:
-				self.HMI_ETemp()
-			elif self.checkkey == self.Homeoffset:
-				self.HMI_Zoffset()
-			elif self.checkkey == self.BedTemp:
-				self.HMI_BedTemp()
-			elif self.checkkey == self.PrintSpeed:
-				self.HMI_PrintSpeed()
-			elif self.checkkey == self.MaxSpeed_value:
-				self.HMI_MaxFeedspeedXYZE()
-			elif self.checkkey == self.MaxAcceleration_value:
-				self.HMI_MaxAccelerationXYZE()
-			elif self.checkkey == self.MaxJerk_value:
-				self.HMI_MaxJerkXYZE()
-			elif self.checkkey == self.Step_value:
-				self.HMI_StepXYZE()
-			else:
-				print(f"Warning: Unknown checkkey state: {self.checkkey}")
-		except Exception as e:
-			print(f"Error in encoder_has_data for checkkey {self.checkkey}: {e}")
-			# Try to recover by going to main menu
-			try:
-				self.Goto_MainMenu()
-			except Exception as recovery_error:
-				print(f"Failed to recover to main menu: {recovery_error}")
+		if self.checkkey == self.MainMenu:
+			self.HMI_MainMenu()
+		elif self.checkkey == self.SelectFile:
+			self.HMI_SelectFile()
+		elif self.checkkey == self.Prepare:
+			self.HMI_Prepare()
+		elif self.checkkey == self.Control:
+			self.HMI_Control()
+		elif self.checkkey == self.PrintProcess:
+			self.HMI_Printing()
+		elif self.checkkey == self.Print_window:
+			self.HMI_PauseOrStop()
+		elif self.checkkey == self.AxisMove:
+			self.HMI_AxisMove()
+		elif self.checkkey == self.TemperatureID:
+			self.HMI_Temperature()
+		elif self.checkkey == self.Motion:
+			self.HMI_Motion()
+		elif self.checkkey == self.Info:
+			self.HMI_Info()
+		elif self.checkkey == self.Tune:
+			self.HMI_Tune()
+		elif self.checkkey == self.PLAPreheat:
+			self.HMI_PLAPreheatSetting()
+		elif self.checkkey == self.ABSPreheat:
+			self.HMI_ABSPreheatSetting()
+		elif self.checkkey == self.MaxSpeed:
+			self.HMI_MaxSpeed()
+		elif self.checkkey == self.MaxAcceleration:
+			self.HMI_MaxAcceleration()
+		elif self.checkkey == self.MaxJerk:
+			self.HMI_MaxJerk()
+		elif self.checkkey == self.Step:
+			self.HMI_Step()
+		elif self.checkkey == self.Move_X:
+			self.HMI_Move_X()
+		elif self.checkkey == self.Move_Y:
+			self.HMI_Move_Y()
+		elif self.checkkey == self.Move_Z:
+			self.HMI_Move_Z()
+		elif self.checkkey == self.Extruder:
+			self.HMI_Move_E()
+		elif self.checkkey == self.ETemp:
+			self.HMI_ETemp()
+		elif self.checkkey == self.Homeoffset:
+			self.HMI_Zoffset()
+		elif self.checkkey == self.BedTemp:
+			self.HMI_BedTemp()
 		# elif self.checkkey == self.FanSpeed:
 		# 	self.HMI_FanSpeed()
-			else:
-				print(f"Warning: Unknown checkkey state: {self.checkkey}")
-		except Exception as e:
-			print(f"Error in encoder_has_data for checkkey {self.checkkey}: {e}")
-			# Try to recover by going to main menu
-			try:
-				self.Goto_MainMenu()
-			except Exception as recovery_error:
-				print(f"Failed to recover to main menu: {recovery_error}")
+		elif self.checkkey == self.PrintSpeed:
+			self.HMI_PrintSpeed()
+		elif self.checkkey == self.MaxSpeed_value:
+			self.HMI_MaxFeedspeedXYZE()
+		elif self.checkkey == self.MaxAcceleration_value:
+			self.HMI_MaxAccelerationXYZE()
+		elif self.checkkey == self.MaxJerk_value:
+			self.HMI_MaxJerkXYZE()
+		elif self.checkkey == self.Step_value:
+			self.HMI_StepXYZE()
 
 	def get_encoder_state(self):
-		"""Get encoder state with error handling"""
-		try:
-			if self.EncoderRateLimit:
-				if self.EncodeMS > current_milli_time():
-					return self.ENCODER_DIFF_NO
-				self.EncodeMS = current_milli_time() + self.ENCODER_WAIT
+		if self.EncoderRateLimit:
+			if self.EncodeMS > current_milli_time():
+				return self.ENCODER_DIFF_NO
+			self.EncodeMS = current_milli_time() + self.ENCODER_WAIT
 
-			# Check for encoder rotation
-			if hasattr(self.encoder, 'value'):
-				if self.encoder.value < self.EncodeLast:
-					self.EncodeLast = self.encoder.value
-					return self.ENCODER_DIFF_CW
-				elif self.encoder.value > self.EncodeLast:
-					self.EncodeLast = self.encoder.value
-					return self.ENCODER_DIFF_CCW
-			
-			# Check for button press
-			if hasattr(self, 'button_pin'):
-				try:
-					if not GPIO.input(self.button_pin):
-						if self.EncodeEnter > current_milli_time(): # prevent double clicks
-							return self.ENCODER_DIFF_NO
-						self.EncodeEnter = current_milli_time() + self.ENCODER_WAIT_ENTER
-						return self.ENCODER_DIFF_ENTER
-				except Exception as gpio_error:
-					print(f"GPIO error reading button: {gpio_error}")
-			
-			return self.ENCODER_DIFF_NO
-			
-		except Exception as e:
-			print(f"Error in get_encoder_state: {e}")
+		if self.encoder.value < self.EncodeLast:
+			self.EncodeLast = self.encoder.value
+			return self.ENCODER_DIFF_CW
+		elif self.encoder.value > self.EncodeLast:
+			self.EncodeLast = self.encoder.value
+			return self.ENCODER_DIFF_CCW
+		elif not GPIO.input(self.button_pin):
+			if self.EncodeEnter > current_milli_time(): # prevent double clicks
+				return self.ENCODER_DIFF_NO
+			self.EncodeEnter = current_milli_time() + self.ENCODER_WAIT_ENTER
+			return self.ENCODER_DIFF_ENTER
+		else:
 			return self.ENCODER_DIFF_NO
 
 	def HMI_AudioFeedback(self, success=True):
@@ -2566,40 +2337,3 @@ class DWIN_LCD:
 			self.pd.buzzer.tone(100, 698)
 		else:
 			self.pd.buzzer.tone(40, 440)
-
-	def handle_critical_error(self, error_msg, exception=None):
-		"""Handle critical errors with user notification"""
-		try:
-			print(f"CRITICAL ERROR: {error_msg}")
-			if exception:
-				print(f"Exception details: {exception}")
-			
-			# Try to show error on LCD
-			try:
-				if hasattr(self, 'lcd'):
-					self.lcd.Draw_Rectangle(1, self.lcd.Color_Red, 0, 0, self.lcd.DWIN_WIDTH - 1, self.lcd.DWIN_HEIGHT - 1)
-					self.lcd.Draw_String(
-						False, False, self.lcd.DWIN_FONT_MENU,
-						self.lcd.Color_White, self.lcd.Color_Red,
-						10, 50, "CRITICAL ERROR"
-					)
-					self.lcd.Draw_String(
-						False, False, self.lcd.DWIN_FONT_STAT,
-						self.lcd.Color_White, self.lcd.Color_Red,
-						10, 100, error_msg[:30]  # Limit length
-					)
-					self.lcd.UpdateLCD()
-			except:
-				pass  # Don't fail if we can't show the error
-			
-		except Exception as e:
-			print(f"Error in error handler: {e}")
-
-	def safe_update_display(self):
-		"""Safely update the LCD display with error handling"""
-		try:
-			self.lcd.UpdateLCD()
-			return True
-		except Exception as e:
-			print(f"Error updating LCD display: {e}")
-			return False
