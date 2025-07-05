@@ -1,7 +1,6 @@
 import time
 import multitimer
 import atexit
-import threading
 
 from encoder import Encoder
 from RPi import GPIO
@@ -363,10 +362,6 @@ class DWIN_LCD:
             self.lcd = None
             print("Continuing in degraded mode: LCD unavailable.")
         
-        # Start LCD retry thread if LCD is unavailable
-        if not self.lcd_available:
-            self._start_lcd_retry_thread(USARTx)
-        
         # Initialize state
         self.checkkey = self.MainMenu
         
@@ -483,15 +478,9 @@ class DWIN_LCD:
         return 49 + self.MLINE * L
 
     def HMI_SetLanguageCache(self):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping HMI_SetLanguageCache")
-            return
         self.lcd.JPG_CacheTo1(self.Language_English)
 
     def HMI_SetLanguage(self):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping HMI_SetLanguage")
-            return
         self.HMI_SetLanguageCache()
 
     def HMI_ShowBoot(self, mesg=None):
@@ -2595,20 +2584,3 @@ class DWIN_LCD:
         except Exception as e:
             print(f"Error updating LCD display: {e}")
             return False
-
-    def _start_lcd_retry_thread(self, USARTx, retry_interval=10):
-        """Start a background thread to retry LCD initialization periodically."""
-        def lcd_retry_loop():
-            while not self.lcd_available:
-                print("Retrying LCD initialization...")
-                try:
-                    lcd = T5UIC1_LCD(USARTx)
-                    self.lcd = lcd
-                    self.lcd_available = True
-                    print("LCD reconnected and available!")
-                    break
-                except Exception as e:
-                    print(f"LCD retry failed: {e}")
-                time.sleep(retry_interval)
-        t = threading.Thread(target=lcd_retry_loop, daemon=True)
-        t.start()
