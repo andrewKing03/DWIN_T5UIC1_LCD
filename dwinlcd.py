@@ -1541,8 +1541,6 @@ class DWIN_LCD:
         if (encoder_diffState == self.ENCODER_DIFF_ENTER):
             self.EncoderRateLimit = True
            
-           
-
             if (self.pd.HMI_ValueStruct.show_mode == -1):  # temperature
                 self.checkkey = self.TemperatureID
                 self.lcd.Draw_IntValue(
@@ -1709,9 +1707,6 @@ class DWIN_LCD:
     # --------------------------------------------------------------#
 
     def Draw_Status_Area(self, with_update):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Draw_Status_Area")
-            return
         #  Clear the bottom area of the screen
         self.lcd.Draw_Rectangle(1, self.lcd.Color_Bg_Black, 0, self.STATUS_Y, self.lcd.DWIN_WIDTH, self.lcd.DWIN_HEIGHT - 1)
         #
@@ -1779,39 +1774,21 @@ class DWIN_LCD:
         # 	time.sleep(.005)
 
     def Draw_Title(self, title):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Draw_Title")
-            return
         self.lcd.Draw_String(False, False, self.lcd.DWIN_FONT_HEAD, self.lcd.Color_White, self.lcd.Color_Bg_Blue, 14, 4, title)
 
     def Draw_Popup_Bkgd_105(self):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Draw_Popup_Bkgd_105")
-            return
         self.lcd.Draw_Rectangle(1, self.lcd.Color_Bg_Window, 14, 105, 258, 374)
 
     def Draw_More_Icon(self, line):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Draw_More_Icon")
-            return
         self.lcd.ICON_Show(self.ICON, self.ICON_More, 226, self.MBASE(line) - 3)
 
     def Draw_Menu_Cursor(self, line):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Draw_Menu_Cursor")
-            return
         self.lcd.Draw_Rectangle(1, self.lcd.Rectangle_Color, 0, self.MBASE(line) - 18, 14, self.MBASE(line + 1) - 20)
 
     def Draw_Menu_Icon(self, line, icon):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Draw_Menu_Icon")
-            return
         self.lcd.ICON_Show(self.ICON, icon, 26, self.MBASE(line) - 3)
 
     def Draw_Menu_Line(self, line, icon=False, label=False):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Draw_Menu_Line")
-            return
         if (label):
             self.lcd.Draw_String(False, False, self.lcd.font8x16, self.lcd.Color_White, self.lcd.Color_Bg_Black, self.LBLX, self.MBASE(line) - 1, label)
         if (icon):
@@ -1820,52 +1797,40 @@ class DWIN_LCD:
 
     # The "Back" label is always on the first line
     def Draw_Back_Label(self):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Draw_Back_Label")
-            return
         self.lcd.Frame_AreaCopy(1, 226, 179, 256, 189, self.LBLX, self.MBASE(0))
 
     # Draw "Back" line at the top
     def Draw_Back_First(self, is_sel=True):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Draw_Back_First")
-            return
         self.Draw_Menu_Line(0, self.ICON_Back)
         self.Draw_Back_Label()
         if (is_sel):
             self.Draw_Menu_Cursor(0)
 
     def draw_move_en(self, line):
-        self.lcd.Frame_AreaCopy(1, 69, 61, 102, 71, self.LBLX + line)  # "Move"
+        self.lcd.Frame_AreaCopy(1, 69, 61, 102, 71, self.LBLX, line)  # "Move"
 
     def draw_max_en(self, line):
-        self.lcd.Frame_AreaCopy(1, 245, 119, 269, 129, self.LBLX + line)  # "Max"
+        self.lcd.Frame_AreaCopy(1, 245, 119, 269, 129, self.LBLX, line)  # "Max"
 
     def draw_max_accel_en(self, line):
         self.draw_max_en(line)
-        self.lcd.Frame_AreaCopy(1, 1, 135, 79, 145, self.LBLX + 27 + line)  # "Acceleration"
+        self.lcd.Frame_AreaCopy(1, 1, 135, 79, 145, self.LBLX + 27, line)  # "Acceleration"
 
     def draw_speed_en(self, inset, line):
-        self.lcd.Frame_AreaCopy(1, 184, 119, 224, 132, self.LBLX + inset + line)  # "Speed"
+        self.lcd.Frame_AreaCopy(1, 184, 119, 224, 132, self.LBLX + inset, line)  # "Speed"
 
     def draw_jerk_en(self, line):
-        self.lcd.Frame_AreaCopy(1, 64, 119, 106, 129, self.LBLX + 27 + line)  # "Jerk"
+        self.lcd.Frame_AreaCopy(1, 64, 119, 106, 129, self.LBLX + 27, line)  # "Jerk"
 
     def draw_steps_per_mm(self, line):
-        self.lcd.Frame_AreaCopy(1, 1, 151, 101, 161, self.LBLX + line)  # "Steps-per-mm"
+        self.lcd.Frame_AreaCopy(1, 1, 151, 101, 161, self.LBLX, line)  # "Steps-per-mm"
 
     # Display an SD item
     def Draw_SDItem(self, item, row=0):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Draw_SDItem")
-            return
         fl = self.pd.GetFiles()[item]
         self.Draw_Menu_Line(row, self.ICON_File, fl)
 
     def Draw_Select_Highlight(self, sel):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Draw_Select_Highlight")
-            return
         self.pd.HMI_flag.select_flag = sel
         if sel:
             c1 = self.lcd.Select_Color
@@ -1879,9 +1844,6 @@ class DWIN_LCD:
         self.lcd.Draw_Rectangle(0, c2, 144, 278, 247, 319)
 
     def Draw_Popup_Bkgd_60(self):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Draw_Popup_Bkgd_60")
-            return
         self.lcd.Draw_Rectangle(1, self.lcd.Color_Bg_Window, 14, 60, 258, 330)
 
     def Draw_Printing_Screen(self):
@@ -1893,9 +1855,6 @@ class DWIN_LCD:
         self.lcd.Frame_AreaCopy(1, 98, 44, 152, 58, 176, 188)  # Stop
 
     def Draw_Print_ProgressBar(self, Percentrecord=None):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Draw_Print_ProgressBar")
-            return
         if not Percentrecord:
             Percentrecord = self.pd.getPercent()
         self.lcd.ICON_Show(self.ICON, self.ICON_Bar, 15, 93)
@@ -1904,18 +1863,12 @@ class DWIN_LCD:
         self.lcd.Draw_String(False, False, self.lcd.font8x16, self.lcd.Percent_Color, self.lcd.Color_Bg_Black, 133, 133, "%")
 
     def Draw_Print_ProgressElapsed(self):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Draw_Print_ProgressElapsed")
-            return
         elapsed = self.pd.duration()  # print timer
         self.lcd.Draw_IntValue(True, True, 1, self.lcd.font8x16, self.lcd.Color_White, self.lcd.Color_Bg_Black, 2, 42, 212, elapsed / 3600)
         self.lcd.Draw_String(False, False, self.lcd.font8x16, self.lcd.Color_White, self.lcd.Color_Bg_Black, 58, 212, ":")
         self.lcd.Draw_IntValue(True, True, 1, self.lcd.font8x16, self.lcd.Color_White, self.lcd.Color_Bg_Black, 2, 66, 212, (elapsed % 3600) / 60)
 
     def Draw_Print_ProgressRemain(self):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Draw_Print_ProgressRemain")
-            return
         remain_time = self.pd.remain()
         if not remain_time: return #time remaining is None during warmup.
         self.lcd.Draw_IntValue(True, True, 1, self.lcd.font8x16, self.lcd.Color_White, self.lcd.Color_Bg_Black, 2, 176, 212, remain_time / 3600)
@@ -2169,28 +2122,16 @@ class DWIN_LCD:
     # --------------------------------------------------------------#
 
     def Clear_Title_Bar(self):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Clear_Title_Bar")
-            return
         self.lcd.Draw_Rectangle(1, self.lcd.Color_Bg_Blue, 0, 0, self.lcd.DWIN_WIDTH, 30)
 
     def Clear_Menu_Area(self):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Clear_Menu_Area")
-            return
         self.lcd.Draw_Rectangle(1, self.lcd.Color_Bg_Black, 0, 31, self.lcd.DWIN_WIDTH, self.STATUS_Y)
 
     def Clear_Main_Window(self):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Clear_Main_Window")
-            return
         self.Clear_Title_Bar()
         self.Clear_Menu_Area()
 
     def Clear_Popup_Area(self):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Clear_Popup_Area")
-            return
         self.Clear_Title_Bar()
         self.lcd.Draw_Rectangle(1, self.lcd.Color_Bg_Black, 0, 31, self.lcd.DWIN_WIDTH, self.lcd.DWIN_HEIGHT)
 
@@ -2242,15 +2183,9 @@ class DWIN_LCD:
         self.lcd.ICON_Show(self.ICON, self.ICON_Confirm_E, 86, 280)
 
     def Erase_Menu_Cursor(self, line):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Erase_Menu_Cursor")
-            return
         self.lcd.Draw_Rectangle(1, self.lcd.Color_Bg_Black, 0, self.MBASE(line) - 18, 14, self.MBASE(line + 1) - 20)
 
     def Erase_Menu_Text(self, line):
-        if not self.lcd_available or self.lcd is None:
-            print("LCD unavailable, skipping Erase_Menu_Text")
-            return
         self.lcd.Draw_Rectangle(1, self.lcd.Color_Bg_Black, self.LBLX, self.MBASE(line) - 14, 271, self.MBASE(line) + 28)
 
     def Move_Highlight(self, ffrom, newline):
