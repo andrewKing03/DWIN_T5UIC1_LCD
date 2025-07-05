@@ -352,12 +352,15 @@ class DWIN_LCD:
 		self.last_cardpercentValue = 101
 		
 		# Initialize LCD
+		self.lcd_available = True
 		try:
 			self.lcd = T5UIC1_LCD(USARTx)
 			print("LCD interface initialized")
 		except Exception as e:
 			print(f"Error initializing LCD: {e}")
-			raise
+			self.lcd_available = False
+			self.lcd = None
+			print("Continuing in degraded mode: LCD unavailable.")
 		
 		# Initialize state
 		self.checkkey = self.MainMenu
@@ -1528,6 +1531,7 @@ class DWIN_LCD:
 					True, True, 0, self.lcd.font8x16, self.lcd.Color_White, self.lcd.Color_Bg_Black,
 					3, 216, self.MBASE(bed_line),
 					self.pd.HMI_ValueStruct.Bed_Temp
+
 				)
 			elif (self.pd.HMI_ValueStruct.show_mode == -2):
 				self.checkkey = self.PLAPreheat
