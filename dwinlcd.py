@@ -2117,16 +2117,24 @@ class DWIN_LCD:
     # --------------------------------------------------------------#
 
     def Clear_Title_Bar(self):
+        if not self.lcd_available or self.lcd is None:
+            return
         self.lcd.Draw_Rectangle(1, self.lcd.Color_Bg_Blue, 0, 0, self.lcd.DWIN_WIDTH, 30)
 
     def Clear_Menu_Area(self):
+        if not self.lcd_available or self.lcd is None:
+            return
         self.lcd.Draw_Rectangle(1, self.lcd.Color_Bg_Black, 0, 31, self.lcd.DWIN_WIDTH, self.STATUS_Y)
 
     def Clear_Main_Window(self):
+        if not self.lcd_available or self.lcd is None:
+            return
         self.Clear_Title_Bar()
         self.Clear_Menu_Area()
 
     def Clear_Popup_Area(self):
+        if not self.lcd_available or self.lcd is None:
+            return
         self.Clear_Title_Bar()
         self.lcd.Draw_Rectangle(1, self.lcd.Color_Bg_Black, 0, 31, self.lcd.DWIN_WIDTH, self.lcd.DWIN_HEIGHT)
 
@@ -2381,14 +2389,6 @@ class DWIN_LCD:
             # Handle status changes
             if hasattr(self, 'last_status') and self.last_status != self.pd.status:
                 self.last_status = self.pd.status
-                print(f"Status changed to: {self.pd.status}")
-                try:
-                    if self.pd.status == 'printing':
-                        self.Goto_PrintProcess()
-                    elif self.pd.status in ['operational', 'complete', 'standby', 'cancelled']:
-                        self.Goto_MainMenu()
-                except Exception as e:
-                    print(f"Error handling status change: {e}")
 
             # Handle print process updates
             if (self.checkkey == self.PrintProcess):
