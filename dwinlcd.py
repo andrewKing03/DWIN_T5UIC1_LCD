@@ -704,6 +704,7 @@ class DWIN_LCD:
                     else:
                         self.Draw_Menu_Line(0, self.ICON_Axis + self.select_prepare.now - 1)
 
+                    # Draw "More" icon for sub-menus
                     if (self.index_prepare < 7):
                         self.Draw_More_Icon(self.MROWS - self.index_prepare + 1)
 
@@ -1539,6 +1540,7 @@ class DWIN_LCD:
 
         if (encoder_diffState == self.ENCODER_DIFF_ENTER):
             self.EncoderRateLimit = True
+           
             if (self.pd.HMI_ValueStruct.show_mode == -1):  # temperature
                 self.checkkey = self.TemperatureID
                 self.lcd.Draw_IntValue(
@@ -1845,6 +1847,9 @@ class DWIN_LCD:
         self.lcd.Draw_Rectangle(1, self.lcd.Color_Bg_Window, 14, 60, 258, 330)
 
     def Draw_Printing_Screen(self):
+        if not self.lcd_available or self.lcd is None:
+            print("LCD unavailable, skipping Draw_Printing_Screen")
+            return
         self.lcd.Frame_AreaCopy(1, 40, 2, 92, 14, 14, 9)  # Tune
         self.lcd.Frame_AreaCopy(1, 0, 44, 96, 58, 41, 188)  # Pause
         self.lcd.Frame_AreaCopy(1, 98, 44, 152, 58, 176, 188)  # Stop
@@ -2117,24 +2122,16 @@ class DWIN_LCD:
     # --------------------------------------------------------------#
 
     def Clear_Title_Bar(self):
-        if not self.lcd_available or self.lcd is None:
-            return
         self.lcd.Draw_Rectangle(1, self.lcd.Color_Bg_Blue, 0, 0, self.lcd.DWIN_WIDTH, 30)
 
     def Clear_Menu_Area(self):
-        if not self.lcd_available or self.lcd is None:
-            return
         self.lcd.Draw_Rectangle(1, self.lcd.Color_Bg_Black, 0, 31, self.lcd.DWIN_WIDTH, self.STATUS_Y)
 
     def Clear_Main_Window(self):
-        if not self.lcd_available or self.lcd is None:
-            return
         self.Clear_Title_Bar()
         self.Clear_Menu_Area()
 
     def Clear_Popup_Area(self):
-        if not self.lcd_available or self.lcd is None:
-            return
         self.Clear_Title_Bar()
         self.lcd.Draw_Rectangle(1, self.lcd.Color_Bg_Black, 0, 31, self.lcd.DWIN_WIDTH, self.lcd.DWIN_HEIGHT)
 
@@ -2389,6 +2386,14 @@ class DWIN_LCD:
             # Handle status changes
             if hasattr(self, 'last_status') and self.last_status != self.pd.status:
                 self.last_status = self.pd.status
+                print(f"Status changed to: {self.pd.status}")
+                try:
+                    if self.pd.status == 'printing':
+                        self.Goto_PrintProcess()
+                    elif self.pd.status in ['operational', 'complete', 'standby', 'cancelled']:
+                        self.Goto_MainMenu()
+                except Exception as e:
+                    print(f"Error handling status change: {e}")
 
             # Handle print process updates
             if (self.checkkey == self.PrintProcess):
