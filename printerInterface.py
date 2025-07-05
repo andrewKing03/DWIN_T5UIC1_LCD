@@ -9,6 +9,7 @@ from requests.exceptions import ConnectionError
 import atexit
 import time
 import asyncio
+from json.decoder import JSONDecodeError
 
 class xyze_t:
 	x = 0.0
@@ -253,7 +254,8 @@ class PrinterData:
 		self.op = MoonrakerSocket(URL, 80, API_Key)
 		self.status = None
 		print(self.op.base_address)
-		self.ks = KlippySocket('/tmp/klippy_uds', callback=self.klippy_callback)
+		# self.ks = KlippySocket('/tmp/klippy_uds', callback=self.klippy_callback)
+		self.ks = KlippySocket('/home/pi/printer_data/comms/klippy.sock', callback=self.klippy_callback)
 		subscribe = {
 			"id": 4001,
 			"method": "objects/subscribe",
@@ -364,7 +366,7 @@ class PrinterData:
 		self.update_variable()
 		#alternative approach
 		#full_version = self.getREST('/printer/info')['result']['software_version']
-		#self.SHORT_BUILD_VERSION = '-'.join(full_version.split('-',2)[:2])
+		#self.SHORT_BUILD_VERSION = '-'.join(full_version.split('-', 2)[:2])
 		self.SHORT_BUILD_VERSION = self.getREST('/machine/update/status?refresh=false')['result']['version_info']['klipper']['version']
 
 		data = self.getREST('/printer/objects/query?toolhead')['result']['status']
@@ -388,7 +390,11 @@ class PrinterData:
 
 	def update_variable(self):
 		query = '/printer/objects/query?extruder&heater_bed&gcode_move&fan'
-		data = self.getREST(query)['result']['status']
+		data = self.getREST(query)
+		if not data or 'result' not in data or 'status' not in data['result']:
+			print('Warning: Missing result or status in response:', data)
+			return False
+		data = data['result']['status']
 		gcm = data['gcode_move']
 		z_offset = gcm['homing_origin'][2] #z offset
 		flow_rate = gcm['extrude_factor'] * 100 #flow rate percent
@@ -420,13 +426,17 @@ class PrinterData:
 				self.BABY_Z_VAR = z_offset
 				self.HMI_ValueStruct.offset_value = z_offset * 100
 				Update = True
-		except:
+		except Exception as e:
+			print('Exception in update_variable:', e)
 			pass #missing key, shouldn't happen, fixes misses on conditionals ¯\_(ツ)_/¯
-		self.job_Info = self.getREST('/printer/objects/query?virtual_sdcard&print_stats')['result']['status']
-		if self.job_Info:
+		self.job_Info = self.getREST('/printer/objects/query?virtual_sdcard&print_stats')
+		if self.job_Info and 'result' in self.job_Info and 'status' in self.job_Info['result']:
+			self.job_Info = self.job_Info['result']['status']
 			self.file_name = self.job_Info['print_stats']['filename']
 			self.status = self.job_Info['print_stats']['state']
 			self.HMI_flag.print_finish = self.getPercent() == 100.0
+		else:
+			print('Warning: Missing result/status in job_Info:', self.job_Info)
 		return Update
 
 	def printingIsPaused(self):
